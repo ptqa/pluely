@@ -5,6 +5,8 @@ mod capture;
 mod chatgpt_oauth;
 mod db;
 mod shortcuts;
+#[cfg(target_os = "linux")]
+mod tray;
 mod window;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -144,6 +146,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             init(app.app_handle());
             let app_handle = app.handle();
+            #[cfg(target_os = "linux")]
+            if let Err(e) = tray::setup_tray(&app_handle) {
+                eprintln!("Failed to setup tray icon: {}", e);
+            }
+
             if app_handle.get_webview_window("dashboard").is_none() {
                 if let Err(e) = window::create_dashboard_window(&app_handle) {
                     eprintln!("Failed to pre-create dashboard window on startup: {}", e);
