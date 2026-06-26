@@ -1,11 +1,5 @@
 import { Card, Updater, DragButton, CustomCursor, Button } from "@/components";
-import {
-  SystemAudio,
-  Completion,
-  AudioVisualizer,
-  StatusIndicator,
-  LiveSuggest,
-} from "./components";
+import { Completion, AudioVisualizer, StatusIndicator, LiveSuggest } from "./components";
 import { useApp } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
 import { SparklesIcon } from "lucide-react";
@@ -49,10 +43,6 @@ const App = () => {
               cleanup doesn't tear down the other capture. */}
           <div className={cn(systemAudio?.capturing && "hidden")}>
             <LiveSuggest {...liveSuggest} />
-          </div>
-
-          <div className={cn(liveSuggest?.active && "hidden")}>
-            <SystemAudio {...systemAudio} />
           </div>
 
           {systemAudio?.capturing ? (
