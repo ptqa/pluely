@@ -4,6 +4,7 @@ import {
   Completion,
   AudioVisualizer,
   StatusIndicator,
+  LiveSuggest,
 } from "./components";
 import { useApp } from "@/hooks";
 import { useApp as useAppContext } from "@/contexts";
@@ -12,9 +13,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { ErrorBoundary } from "react-error-boundary";
 import { ErrorLayout } from "@/layouts";
 import { getPlatform } from "@/lib";
+import { cn } from "@/lib/utils";
 
 const App = () => {
-  const { isHidden, systemAudio } = useApp();
+  const { isHidden, systemAudio, liveSuggest } = useApp();
   const { customizable } = useAppContext();
   const platform = getPlatform();
 
@@ -42,7 +44,17 @@ const App = () => {
         }`}
       >
         <Card className="w-full flex flex-row items-center gap-2 p-2">
-          <SystemAudio {...systemAudio} />
+          {/* Live Suggest: listens to mic + system audio and auto-suggests.
+              Kept mounted (hidden) during plain system-audio capture so its
+              cleanup doesn't tear down the other capture. */}
+          <div className={cn(systemAudio?.capturing && "hidden")}>
+            <LiveSuggest {...liveSuggest} />
+          </div>
+
+          <div className={cn(liveSuggest?.active && "hidden")}>
+            <SystemAudio {...systemAudio} />
+          </div>
+
           {systemAudio?.capturing ? (
             <div className="flex flex-row items-center gap-2 justify-between w-full">
               <div className="flex flex-1 items-center gap-2">
@@ -62,7 +74,7 @@ const App = () => {
 
           <div
             className={`${
-              systemAudio?.capturing
+              systemAudio?.capturing || liveSuggest?.active
                 ? "hidden w-full fade-out transition-all duration-300"
                 : "w-full flex flex-row gap-2 items-center"
             }`}

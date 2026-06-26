@@ -428,6 +428,17 @@ No subscriptions to manage, no accounts to maintain, and no services to configur
 
 This includes essential packages like WebKitGTK (Linux), system libraries, and other dependencies required for Tauri applications to run properly on your operating system.
 
+### Native Audio/AEC Build Tools
+
+Live Suggest uses bundled WebRTC audio processing for acoustic echo cancellation. When building from source on Ubuntu/Debian, install the native build tools required by that dependency:
+
+```bash
+sudo apt update
+sudo apt install -y meson ninja-build clang libclang-dev pkg-config build-essential
+```
+
+`meson` and `ninja-build` build the bundled WebRTC audio library, `clang`/`libclang-dev` are used by Rust bindgen, and `build-essential`/`pkg-config` provide the standard native build toolchain.
+
 ---
 
 ## Installation & Setup

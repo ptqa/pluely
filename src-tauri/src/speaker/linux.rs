@@ -2,6 +2,8 @@
 use super::AudioDevice;
 use anyhow::{anyhow, Result};
 use futures_util::Stream;
+use libpulse_binding as pulse;
+use libpulse_simple_binding as psimple;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -10,11 +12,8 @@ use std::task::{Poll, Waker};
 use std::thread;
 use tracing::error;
 use tracing::warn;
-use libpulse_binding as pulse;
-use libpulse_simple_binding as psimple;
 
 use psimple::Simple;
-use pulse::context::introspect::Introspector;
 use pulse::context::Context;
 use pulse::mainloop::standard::Mainloop;
 use pulse::sample::{Format, Spec};
@@ -323,7 +322,7 @@ impl SpeakerStream {
         let spec = Spec {
             format: Format::F32le,
             channels: 1,
-            rate: 44100, // Fixed: Use 44100 Hz to match macOS/Windows
+            rate: 48000, // WebRTC AEC works best with 10ms frames at 48 kHz.
         };
 
         if !spec.is_valid() {

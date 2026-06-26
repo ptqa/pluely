@@ -36,6 +36,8 @@ const SystemPrompts = () => {
     deletePrompt,
     updatePrompt,
     selectedPromptId,
+    liveSuggestPromptId,
+    setLiveSuggestPrompt,
     handleSelectPrompt,
     clearError,
   } = useSystemPrompts();
@@ -230,9 +232,28 @@ const SystemPrompts = () => {
                   </div>
                 </CardHeader>
                 <div className="absolute bottom-2 left-4 w-full flex items-center justify-between">
-                  <span className="text-[10px] lg:text-xs text-muted-foreground select-none">
-                    {prompt.created_at}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLiveSuggestPrompt(prompt.id);
+                    }}
+                    title={
+                      liveSuggestPromptId === prompt.id
+                        ? "This prompt is used for Live Suggest. Click to unset."
+                        : "Use this prompt for Live Suggest"
+                    }
+                    className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors ${
+                      liveSuggestPromptId === prompt.id
+                        ? "text-green-600 font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <WandSparklesIcon className="size-3" />
+                    {liveSuggestPromptId === prompt.id
+                      ? "Live Suggest"
+                      : "Use for Live Suggest"}
+                  </button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild className="mr-6">
                       <button

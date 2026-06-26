@@ -30,6 +30,11 @@ const AutoSpeechVADInternal = ({
       : {};
 
   const vad = useMicVAD({
+    // Load VAD model + worklet + onnxruntime WASM from the local app root
+    // (copied there by vite-plugin-static-copy) instead of the default CDN,
+    // which does not load inside the Tauri webview.
+    baseAssetPath: "/",
+    onnxWASMBasePath: "/",
     userSpeakingThreshold: 0.6,
     startOnLoad: true,
     additionalAudioConstraints: audioConstraints,

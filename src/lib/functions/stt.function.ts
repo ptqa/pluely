@@ -10,6 +10,67 @@ import { TYPE_PROVIDER } from "@/types";
 import curl2Json from "@bany/curl-to-json";
 import { shouldUsePluelyAPI } from "./pluely.api";
 
+// Common Whisper outro/subtitle hallucinations. Drop only full normalized matches.
+const WHISPER_HALLUCINATIONS = new Set([
+  "thanks for watching",
+  "thank you for watching",
+  "thanks for listening",
+  "thank you for listening",
+  "please subscribe",
+  "subscribe to my channel",
+  "like and subscribe",
+  "please like and subscribe",
+  "dont forget to subscribe",
+  "hit the bell icon",
+  "click the subscribe button",
+  "see you in the next video",
+  "see you next time",
+  "see you in the next one",
+  "bye bye",
+  "thank you for your attention",
+  "thanks for your attention",
+  "subtitles by the amaraorg community",
+  "subtitles by",
+  "translated by",
+  "transcribed by",
+  "thank you",
+  "thanks",
+  "thank you so much",
+  "thank you very much",
+  "gracias por ver",
+  "gracias por mirar",
+  "gracias por escuchar",
+  "gracias por su atencion",
+  "gracias por tu atencion",
+  "subtitulos por",
+  "traducido por",
+  "transcrito por",
+  "gracias",
+  "you",
+]);
+
+function normalizeSttPhrase(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanSttTranscription(text: string): string {
+  const cleaned = text.trim();
+  const normalized = normalizeSttPhrase(cleaned);
+
+  if (!cleaned || !normalized || WHISPER_HALLUCINATIONS.has(normalized)) {
+    return "";
+  }
+
+  return cleaned;
+}
+
 // Pluely STT function
 async function fetchPluelySTT(audio: File | Blob): Promise<string> {
   try {
@@ -26,7 +87,7 @@ async function fetchPluelySTT(audio: File | Blob): Promise<string> {
     });
 
     if (response.success && response.transcription) {
-      return response.transcription;
+      return cleanSttTranscription(response.transcription) || "No transcription found";
     } else {
       return response.error || "Transcription failed";
     }
@@ -95,7 +156,12 @@ export async function fetchSTT(params: STTParams): Promise<string> {
     };
 
     // Prepare request
-    let url = deepVariableReplacer(curlJson.url || "", allVariables);
+    // curl2Json URL-encodes template variables in the URL path (e.g. {{ACCOUNT_ID}} → %7B%7BACCOUNT_ID%7D%7D).
+    // Decode only the template markers before variable replacement.
+    const rawUrl = (curlJson.url || "")
+      .replace(/%7B%7B/gi, "{{")
+      .replace(/%7D%7D/gi, "}}");
+    let url = deepVariableReplacer(rawUrl, allVariables);
     const headers = deepVariableReplacer(curlJson.header || {}, allVariables);
     const formData = deepVariableReplacer(curlJson.form || {}, allVariables);
 
@@ -185,7 +251,9 @@ export async function fetchSTT(params: STTParams): Promise<string> {
       body = JSON.stringify(deepVariableReplacer(dataObj, allVariables));
     }
 
-    const fetchFunction = url?.includes("http") ? fetch : tauriFetch;
+    // Form-based providers use native fetch (FormData support).
+    // JSON/binary providers use tauriFetch (Rust-side, bypasses CORS).
+    const fetchFunction = isForm ? fetch : tauriFetch;
 
     // Send request
     let response: Response;
@@ -225,7 +293,7 @@ export async function fetchSTT(params: STTParams): Promise<string> {
     // Extract transcription
     const rawPath = provider.responseContentPath || "text";
     const path = rawPath.charAt(0).toLowerCase() + rawPath.slice(1);
-    const transcription = (getByPath(data, path) || "").trim();
+    const transcription = cleanSttTranscription(getByPath(data, path) || "");
 
     if (!transcription) {
       return [...warnings, "No transcription found"].join("; ");

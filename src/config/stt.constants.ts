@@ -5,7 +5,9 @@ export const SPEECH_TO_TEXT_PROVIDERS = [
     curl: `curl -X POST "https://api.openai.com/v1/audio/transcriptions" \\
       -H "Authorization: Bearer {{API_KEY}}" \\
       -F "file={{AUDIO}}" \\
-      -F "model={{MODEL}}"`,
+      -F "model={{MODEL}}" \\
+      -F "temperature=0" \\
+      -F "language=en"`,
     responseContentPath: "text",
     streaming: false,
   },
@@ -100,6 +102,16 @@ export const SPEECH_TO_TEXT_PROVIDERS = [
       -H "Content-Type: audio/wav" \\
       --data-binary {{AUDIO}}`,
     responseContentPath: "results[0].alternatives[0].transcript",
+    streaming: false,
+  },
+  {
+    id: "cloudflare-workers-ai-stt",
+    name: "Cloudflare Workers AI (Whisper)",
+    curl: `curl -X POST "https://api.cloudflare.com/client/v4/accounts/{{ACCOUNT_ID}}/ai/run/@cf/openai/whisper-large-v3-turbo" \\
+      -H "Authorization: Bearer {{API_KEY}}" \\
+      -H "Content-Type: application/json" \\
+      -d '{"audio": "{{AUDIO}}"}'`,
+    responseContentPath: "result.text",
     streaming: false,
   },
 ];

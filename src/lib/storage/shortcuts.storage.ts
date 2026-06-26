@@ -26,6 +26,9 @@ export const getPlatformDefaultKey = (action: ShortcutAction): string => {
 /**
  * Get default shortcuts configuration
  */
+// Shortcuts disabled by default in local dev
+const DEFAULT_DISABLED_ACTIONS = new Set(["move_window"]);
+
 export const getDefaultShortcutsConfig = (): ShortcutsConfig => {
   const bindings: Record<string, ShortcutBinding> = {};
 
@@ -33,7 +36,7 @@ export const getDefaultShortcutsConfig = (): ShortcutsConfig => {
     bindings[action.id] = {
       action: action.id,
       key: getPlatformDefaultKey(action),
-      enabled: true,
+      enabled: !DEFAULT_DISABLED_ACTIONS.has(action.id),
     };
   });
 
@@ -49,16 +52,20 @@ export const getDefaultShortcutsConfig = (): ShortcutsConfig => {
 export const getShortcutsConfig = (): ShortcutsConfig => {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.SHORTCUTS);
+    const defaults = getDefaultShortcutsConfig();
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Merge with defaults to ensure all default actions are present
-      const defaults = getDefaultShortcutsConfig();
+      const merged = { ...defaults.bindings, ...parsed.bindings };
+      // Always enforce the disabled-by-default set, regardless of stored state
+      DEFAULT_DISABLED_ACTIONS.forEach((id) => {
+        if (merged[id]) merged[id].enabled = false;
+      });
       return {
-        bindings: { ...defaults.bindings, ...parsed.bindings },
+        bindings: merged,
         customActions: parsed.customActions || [],
       };
     }
-    return getDefaultShortcutsConfig();
+    return defaults;
   } catch (error) {
     console.error("Failed to get shortcuts config:", error);
     return getDefaultShortcutsConfig();

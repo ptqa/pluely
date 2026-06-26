@@ -27,6 +27,16 @@ export const useSystemPrompts = () => {
       return stored ? Number(stored) : null;
     }
   );
+  // Prompt chosen as the default for Live Suggest (independent of the main
+  // assistant prompt selection above).
+  const [liveSuggestPromptId, setLiveSuggestPromptIdState] = useState<
+    number | null
+  >(() => {
+    const stored = safeLocalStorage.getItem(
+      STORAGE_KEYS.LIVE_SUGGEST_PROMPT_ID
+    );
+    return stored ? Number(stored) : null;
+  });
 
   /**
    * Fetch all system prompts from database
@@ -181,11 +191,36 @@ export const useSystemPrompts = () => {
     [prompts, setSystemPrompt]
   );
 
+  /**
+   * Toggle whether a prompt is the default Live Suggest prompt. Passing the
+   * already-selected id (or null) clears it, falling back to the built-in
+   * Live Suggest prompt.
+   */
+  const setLiveSuggestPrompt = useCallback(
+    (promptId: number | null) => {
+      setLiveSuggestPromptIdState((current) => {
+        const next = current === promptId ? null : promptId;
+        if (next === null) {
+          safeLocalStorage.removeItem(STORAGE_KEYS.LIVE_SUGGEST_PROMPT_ID);
+        } else {
+          safeLocalStorage.setItem(
+            STORAGE_KEYS.LIVE_SUGGEST_PROMPT_ID,
+            String(next)
+          );
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   return {
     prompts,
     isLoading,
     error,
     selectedPromptId,
+    liveSuggestPromptId,
+    setLiveSuggestPrompt,
     createPrompt,
     updatePrompt,
     deletePrompt,

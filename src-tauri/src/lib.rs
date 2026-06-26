@@ -2,16 +2,20 @@
 mod activate;
 mod api;
 mod capture;
+mod chatgpt_oauth;
 mod db;
 mod shortcuts;
 mod window;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::Manager;
 use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 use tokio::task::JoinHandle;
 mod speaker;
 use capture::CaptureState;
 use speaker::VadConfig;
+
+#[cfg(target_os = "macos")]
+use tauri::{AppHandle, WebviewWindow};
 
 #[cfg(target_os = "macos")]
 #[allow(deprecated)]
@@ -20,6 +24,7 @@ use tauri_nspanel::{cocoa::appkit::NSWindowCollectionBehavior, panel_delegate, W
 #[derive(Default)]
 pub struct AudioState {
     stream_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    live_stream_task: Arc<Mutex<Option<speaker::LiveCaptureHandle>>>,
     vad_config: Arc<Mutex<VadConfig>>,
     is_capturing: Arc<Mutex<bool>>,
 }
@@ -29,11 +34,19 @@ fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Forward a front-end log line to the process stderr so it shows up in the
+/// same `tauri dev` terminal as the native logs (the WebKitGTK webview console
+/// is otherwise only visible in the per-window DevTools).
+#[tauri::command]
+fn log_message(level: String, message: String) {
+    eprintln!("[LiveSuggest][{}] {}", level, message);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Get PostHog API key
     let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:pluely.db", db::migrations())
@@ -41,6 +54,7 @@ pub fn run() {
         )
         .manage(AudioState::default())
         .manage(CaptureState::default())
+        .manage(chatgpt_oauth::ChatGptOAuthState::default())
         .manage(shortcuts::WindowVisibility {
             is_hidden: Mutex::new(false),
         })
@@ -67,15 +81,16 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_machine_uid::init());
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_nspanel::init());
-    }
-    let mut builder = builder
+    let builder = builder.plugin(tauri_nspanel::init());
+
+    let builder = builder
         .invoke_handler(tauri::generate_handler![
             get_app_version,
+            log_message,
             window::set_window_height,
             window::open_dashboard,
             window::toggle_dashboard,
+            window::focus_main_window,
             window::move_window,
             capture::capture_to_base64,
             capture::start_screen_capture,
@@ -104,8 +119,15 @@ pub fn run() {
             api::create_system_prompt,
             api::check_license_status,
             api::get_activity,
+            chatgpt_oauth::start_chatgpt_oauth,
+            chatgpt_oauth::finish_chatgpt_oauth,
+            chatgpt_oauth::chatgpt_oauth_get_token,
+            chatgpt_oauth::chatgpt_oauth_save_token,
+            chatgpt_oauth::chatgpt_oauth_remove_token,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
+            speaker::start_live_audio_capture,
+            speaker::stop_live_audio_capture,
             speaker::manual_stop_continuous,
             speaker::check_system_audio_access,
             speaker::request_system_audio_access,
@@ -125,6 +147,27 @@ pub fn run() {
             if app_handle.get_webview_window("dashboard").is_none() {
                 if let Err(e) = window::create_dashboard_window(&app_handle) {
                     eprintln!("Failed to pre-create dashboard window on startup: {}", e);
+                }
+            }
+
+            // Linux (WebKitGTK) denies getUserMedia (microphone) permission
+            // requests by default, which silently breaks browser-side voice
+            // input. Explicitly allow webview permission requests so the mic VAD
+            // can open the microphone. macOS/Windows handle this via the OS
+            // permission prompts (see info.plist on macOS).
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    if let Err(e) = window.with_webview(|webview| {
+                        use webkit2gtk::{PermissionRequestExt, WebViewExt};
+                        let wv = webview.inner();
+                        wv.connect_permission_request(|_wv, req| {
+                            req.allow();
+                            true
+                        });
+                    }) {
+                        eprintln!("Failed to attach webview permission handler: {}", e);
+                    }
                 }
             }
 
@@ -201,9 +244,7 @@ pub fn run() {
 
     // Add macOS-specific permissions plugin
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_plugin_macos_permissions::init());
-    }
+    let builder = builder.plugin(tauri_plugin_macos_permissions::init());
 
     builder
         .run(tauri::generate_context!())

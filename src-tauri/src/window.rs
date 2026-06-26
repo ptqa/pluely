@@ -119,6 +119,27 @@ pub fn toggle_dashboard(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Brings the main overlay window to the foreground and hides the dashboard.
+/// Used when resuming a Live Suggest session from the dashboard history, so the
+/// live overlay (where capture runs) is immediately visible.
+#[tauri::command]
+pub fn focus_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(dashboard_window) = app.get_webview_window("dashboard") {
+        let _ = dashboard_window.hide();
+    }
+    if let Some(main_window) = app.get_webview_window("main") {
+        main_window
+            .show()
+            .map_err(|e| format!("Failed to show main window: {}", e))?;
+        main_window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus main window: {}", e))?;
+    } else {
+        return Err("Main window not found".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn move_window(app: tauri::AppHandle, direction: String, step: i32) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {

@@ -13,6 +13,7 @@ import {
   GlobeIcon,
   BugIcon,
   MessageSquareTextIcon,
+  RadioTowerIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
@@ -36,6 +37,11 @@ export const useMenuItems = () => {
       icon: MessagesSquare,
       label: "Chats",
       href: "/chats",
+    },
+    {
+      icon: RadioTowerIcon,
+      label: "Live Suggest",
+      href: "/live-suggest",
     },
     {
       icon: WandSparkles,

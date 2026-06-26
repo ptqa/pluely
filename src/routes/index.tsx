@@ -11,6 +11,8 @@ import {
   Screenshot,
   Chats,
   Responses,
+  LiveSuggestHistory,
+  ViewLiveSuggest,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 
@@ -24,6 +26,11 @@ export default function AppRoutes() {
           <Route path="/chats" element={<Chats />} />
           <Route path="/system-prompts" element={<SystemPrompts />} />
           <Route path="/chats/view/:conversationId" element={<ViewChat />} />
+          <Route path="/live-suggest" element={<LiveSuggestHistory />} />
+          <Route
+            path="/live-suggest/view/:sessionId"
+            element={<ViewLiveSuggest />}
+          />
           <Route path="/shortcuts" element={<Shortcuts />} />
           <Route path="/screenshot" element={<Screenshot />} />
           <Route path="/settings" element={<Settings />} />

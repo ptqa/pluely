@@ -9,5 +9,6 @@ export * from "./GetLicense";
 export * from "./CustomCursor";
 export * from "./Sidebar";
 export * from "./Empty";
+export * from "./SuggestionCard";
 export * from "./Markdown/copy-button";
 export * from "./Icons";

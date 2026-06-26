@@ -1,6 +1,12 @@
 import { Button, Header, Input, Selection, TextInput } from "@/components";
+import {
+  getStoredChatGptOAuth,
+  OPENAI_CHATGPT_PROVIDER_ID,
+  removeStoredChatGptOAuth,
+  startChatGptOAuth,
+} from "@/lib";
 import { UseSettingsReturn } from "@/types";
-import curl2Json, { ResultJSON } from "@bany/curl-to-json";
+import curl2Json from "@bany/curl-to-json";
 import { KeyIcon, TrashIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -10,20 +16,32 @@ export const Providers = ({
   onSetSelectedAIProvider,
   variables,
 }: UseSettingsReturn) => {
-  const [localSelectedProvider, setLocalSelectedProvider] =
-    useState<ResultJSON | null>(null);
+  const [chatGptAuthStatus, setChatGptAuthStatus] = useState<string>(
+    "Not signed in"
+  );
+  const [chatGptAuthLoading, setChatGptAuthLoading] = useState(false);
+  const isChatGptProvider =
+    selectedAIProvider?.provider === OPENAI_CHATGPT_PROVIDER_ID;
+  const providerConfig = allAiProviders?.find(
+    (p) => p?.id === selectedAIProvider?.provider
+  );
+  const localSelectedProvider = providerConfig
+    ? curl2Json(providerConfig.curl)
+    : null;
 
   useEffect(() => {
-    if (selectedAIProvider?.provider) {
-      const provider = allAiProviders?.find(
-        (p) => p?.id === selectedAIProvider?.provider
-      );
-      if (provider) {
-        const json = curl2Json(provider?.curl);
-        setLocalSelectedProvider(json as ResultJSON);
-      }
-    }
-  }, [selectedAIProvider?.provider]);
+    if (!isChatGptProvider) return;
+
+    getStoredChatGptOAuth()
+      .then((token) => {
+        setChatGptAuthStatus(
+          token?.refresh
+            ? `Signed in${token.accountId ? ` (${token.accountId})` : ""}`
+            : "Not signed in"
+        );
+      })
+      .catch(() => setChatGptAuthStatus("Not signed in"));
+  }, [isChatGptProvider]);
 
   const findKeyAndValue = (key: string) => {
     return variables?.find((v) => v?.key === key);
@@ -77,7 +95,50 @@ export const Providers = ({
         />
       ) : null}
 
-      {findKeyAndValue("api_key") ? (
+      {isChatGptProvider ? (
+        <div className="space-y-2">
+          <Header
+            title="ChatGPT Plus/Pro"
+            description="Sign in with your ChatGPT account to use your Plus or Pro subscription for OpenAI model calls. OAuth tokens are stored in your system keychain."
+          />
+          <div className="flex items-center gap-2">
+            <div className="flex-1 rounded-md border border-input/50 px-3 py-2 text-sm text-muted-foreground">
+              {chatGptAuthStatus}
+            </div>
+            <Button
+              onClick={async () => {
+                setChatGptAuthLoading(true);
+                setChatGptAuthStatus("Waiting for browser sign-in...");
+                try {
+                  const token = await startChatGptOAuth();
+                  setChatGptAuthStatus(
+                    `Signed in${token.accountId ? ` (${token.accountId})` : ""}`
+                  );
+                } catch (error) {
+                  setChatGptAuthStatus(
+                    error instanceof Error ? error.message : String(error)
+                  );
+                } finally {
+                  setChatGptAuthLoading(false);
+                }
+              }}
+              disabled={chatGptAuthLoading}
+            >
+              Sign in with ChatGPT Plus/Pro
+            </Button>
+            <Button
+              onClick={async () => {
+                await removeStoredChatGptOAuth();
+                setChatGptAuthStatus("Not signed in");
+              }}
+              disabled={chatGptAuthLoading}
+              variant="destructive"
+            >
+              Sign out
+            </Button>
+          </div>
+        </div>
+      ) : findKeyAndValue("api_key") ? (
         <div className="space-y-2">
           <Header
             title="API Key"

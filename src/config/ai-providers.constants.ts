@@ -1,3 +1,5 @@
+export const OPENAI_CHATGPT_PROVIDER_ID = "openai-chatgpt";
+
 export const AI_PROVIDERS = [
   {
     id: "openai",
@@ -9,6 +11,19 @@ export const AI_PROVIDERS = [
     "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
+    streaming: true,
+  },
+  {
+    id: OPENAI_CHATGPT_PROVIDER_ID,
+    curl: `curl https://chatgpt.com/backend-api/codex/responses \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "{{MODEL}}",
+    "instructions": "{{SYSTEM_PROMPT}}",
+    "input": [{"role": "user", "content": [{"type": "input_text", "text": "{{TEXT}}"}, {"type": "input_image", "image_url": "data:image/png;base64,{{IMAGE}}"}]}],
+    "stream": true
+  }'`,
+    responseContentPath: "output_text",
     streaming: true,
   },
   {
