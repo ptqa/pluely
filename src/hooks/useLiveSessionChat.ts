@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
 import { useApp } from "@/contexts";
 import { LIVE_SUGGEST_HISTORY_CHAT_INSTRUCTIONS } from "@/config";
 import {
@@ -23,6 +22,7 @@ export const LIVE_SESSION_CHAT_QUICK_PROMPTS = [
 ] as const;
 
 const ROOT_PARENT_KEY = "__root__";
+const STREAM_UPDATE_INTERVAL_MS = 80;
 
 const getParentKey = (parentId?: string | null): string =>
   parentId || ROOT_PARENT_KEY;
@@ -125,7 +125,6 @@ export function useLiveSessionChat(session: LiveSession | null) {
   const [activeChildByParent, setActiveChildByParent] = useState<
     Record<string, string>
   >({});
-  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [error, setError] = useState("");
@@ -141,6 +140,19 @@ export function useLiveSessionChat(session: LiveSession | null) {
   const messages = useMemo(
     () => buildVisiblePath(allMessages, activeChildByParent),
     [activeChildByParent, allMessages]
+  );
+  const sessionSystemPrompt = useMemo(
+    () =>
+      session
+        ? `${LIVE_SUGGEST_HISTORY_CHAT_INSTRUCTIONS}\n\nSession material:\n${formatSessionMaterial(
+            session
+          )}`
+        : "",
+    [session]
+  );
+  const sessionImages = useMemo(
+    () => (session ? getSessionImages(session) : []),
+    [session]
   );
 
   useEffect(() => {
@@ -227,12 +239,29 @@ export function useLiveSessionChat(session: LiveSession | null) {
         [getParentKey(parentId)]: userMessage.id,
         [userMessage.id]: assistantMessage.id,
       }));
-      setInput("");
       setError("");
       setIsLoading(true);
       await upsertLiveSessionChatMessage(userMessage);
 
       let full = "";
+      let flushTimer: number | null = null;
+      const updateAssistantContent = () => {
+        setAllMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantMessage.id
+              ? { ...message, content: full }
+              : message
+          )
+        );
+      };
+      const scheduleAssistantUpdate = () => {
+        if (flushTimer != null) return;
+        flushTimer = window.setTimeout(() => {
+          flushTimer = null;
+          updateAssistantContent();
+        }, STREAM_UPDATE_INTERVAL_MS);
+      };
+
       try {
         const usePluelyAPI = await shouldUsePluelyAPI();
         if (!selectedAIProvider.provider && !usePluelyAPI) {
@@ -253,21 +282,23 @@ export function useLiveSessionChat(session: LiveSession | null) {
         for await (const chunk of fetchAIResponse({
           provider: usePluelyAPI ? undefined : provider,
           selectedProvider: selectedAIProvider,
-          systemPrompt: `${LIVE_SUGGEST_HISTORY_CHAT_INSTRUCTIONS}\n\nSession material:\n${formatSessionMaterial(session)}`,
+          systemPrompt: sessionSystemPrompt,
           history,
           userMessage: trimmedPrompt,
-          imagesBase64: getSessionImages(session),
+          imagesBase64: sessionImages,
           signal: controller.signal,
         })) {
           if (controller.signal.aborted) break;
           full += chunk;
-          setAllMessages((prev) =>
-            prev.map((message) =>
-              message.id === assistantMessage.id
-                ? { ...message, content: full }
-                : message
-            )
-          );
+          scheduleAssistantUpdate();
+        }
+
+        if (flushTimer != null) {
+          window.clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        if (full) {
+          updateAssistantContent();
         }
 
         if (controller.signal.aborted) {
@@ -303,6 +334,9 @@ export function useLiveSessionChat(session: LiveSession | null) {
           setAllMessages((prev) => prev.filter((m) => m.id !== assistantMessage.id));
         }
       } finally {
+        if (flushTimer != null) {
+          window.clearTimeout(flushTimer);
+        }
         if (abortRef.current === controller) abortRef.current = null;
         setIsLoading(false);
       }
@@ -312,17 +346,19 @@ export function useLiveSessionChat(session: LiveSession | null) {
       isLoading,
       selectedAIProvider,
       session,
+      sessionImages,
+      sessionSystemPrompt,
     ]
   );
 
   const submit = useCallback(
-    async (nextPrompt?: string) => {
-      const prompt = (nextPrompt ?? input).trim();
+    async (nextPrompt: string) => {
+      const prompt = nextPrompt.trim();
       if (!prompt) return;
       const parentId = messages[messages.length - 1]?.id ?? null;
       await runPrompt(prompt, parentId, messages);
     },
-    [input, messages, runPrompt]
+    [messages, runPrompt]
   );
 
   const editMessage = useCallback(
@@ -377,20 +413,8 @@ export function useLiveSessionChat(session: LiveSession | null) {
     }));
   }, []);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        submit();
-      }
-    },
-    [submit]
-  );
-
   return {
     messages,
-    input,
-    setInput,
     isLoading,
     isLoadingMessages,
     error,
@@ -400,6 +424,5 @@ export function useLiveSessionChat(session: LiveSession | null) {
     getBranchInfo,
     switchBranch,
     stop,
-    handleKeyDown,
   };
 }
